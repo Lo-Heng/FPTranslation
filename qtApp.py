@@ -1,15 +1,16 @@
 from PyQt5.QtWidgets import *
 import sys
-from PyQt5 import *
 # import win32clipboard 
 # import win32con
 import subprocess
 from PIL import ImageGrab
 from ImgEncryptUtil import *
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt,pyqtSignal
 from AesUtil import *
-from PyQt5.Qt import *
-
+import win32clipboard as w
+import win32con
+from PyQt5 import QtCore, QtWidgets
+from system_hotkey import SystemHotkey
 version = "0.1 alpha"
 enFromImgPath = "./enIn.png" # 加密图片默认输入路径
 deFromImgPath = "./deIn.bmp" # 解密图片默认输入路径
@@ -25,7 +26,26 @@ def getClipImg():
     # self.label.setPixmap(QPixmap.fromImage(img))
     # img.save('paste.bmp', 'BMP')
 
-class panel():
+class panel(QWidget):
+
+    sig_keyhot = pyqtSignal(str)
+    def __init__(self,window):
+        super().__init__(window)
+        #2. 设置我们的自定义热键响应函数
+        self.sig_keyhot.connect(self.MKey_pressEvent)
+        #3. 初始化两个热键
+        self.hk_start,self.hk_stop = SystemHotkey(),SystemHotkey()
+        #4. 绑定快捷键和对应的信号发送函数
+        self.hk_start.register(('alt','c'),callback=lambda x:self.send_key_event("start"))
+        self.hk_stop.register(('alt', 'v'), callback=lambda x: self.send_key_event("stop"))
+
+    #热键处理函数
+    def MKey_pressEvent(self,i_str):
+        print("按下的按键是%s" % (i_str))
+        
+    #热键信号发送函数(将外部信号，转化成qt信号)
+    def send_key_event(self,i_str):
+        self.sig_keyhot.emit(i_str)
 
     def handleEnBtn(self):
         strEncrypted = self.text.toPlainText()  # 获取文本框中的东西
@@ -155,9 +175,9 @@ class panel():
         self.deBtn.clicked.connect(self.handleDeBtn) #为按钮添加单击事件
 
         #获取剪切板
-        txt=str(getClipboardData(),'utf-8')
+        txt=getClipboardData()
         txt=txt.strip().replace('\r\n',' ').replace('\r',' ').replace('\n',' ')
-        # print(txt)
+        print(txt)
     
         # 初始化数据
         self.text.setPlainText(txt)
@@ -168,12 +188,11 @@ class panel():
 
 
 
-#获取剪切板内容
-# def gettext():
-#     win32clipboard.OpenClipboard()
-#     data = win32clipboard.GetClipboardData()
-#     win32clipboard.CloseClipboard()
-#     return t
+def setWinText(aString):
+    w.OpenClipboard()
+    w.EmptyClipboard()
+    w.SetClipboardData(win32con.CF_TEXT, aString)
+    w.CloseClipboard()
 
 def getClipboardData():
     if(platform == 'darwin'): #如果是苹果
@@ -181,10 +200,15 @@ def getClipboardData():
         p = subprocess.Popen(['pbpaste'], stdout=subprocess.PIPE)
         retcode = p.wait()
         data = p.stdout.read()
+        data = str(data,'utf-8')
         #这里的data为bytes类型，之后需要转成utf-8操作
         return data
     else: # 如果是windows
-        return "dk"
+        w.OpenClipboard()
+        data = w.GetClipboardData(win32con.CF_TEXT)
+        w.CloseClipboard()
+        data = str(data,'utf-8')
+        return data
 
 def setClipboardData(data):
     p = subprocess.Popen(['pbcopy'], stdin=subprocess.PIPE)
@@ -204,7 +228,8 @@ def imgDecrypt(fromPath,toPath):
     imgUtils = ImgUtils()
     imgUtils.imgDecrypt(fromPath,toPath)
 
-
+def fun():
+    print ("Do something")
 if __name__=='__main__': 
 
     
@@ -217,6 +242,6 @@ if __name__=='__main__':
     #创建应用程序和对象
     app = QtWidgets.QApplication(sys.argv)  # 程序实例
     window = QtWidgets.QWidget()
-    ui = panel()
+    ui = panel(window)
     ui.setUI(window)
     sys.exit(app.exec_())
